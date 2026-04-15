@@ -42,13 +42,26 @@ A FastAPI application for managing a library's book collection with PostgreSQL d
 
 ## API Endpoints
 
-- `GET /books/` - Get all books with optional pagination, filtering, and sorting
+- `GET /books/` - Get all books with pagination, filtering, and sorting
   - Query parameters:
-    - `skip`: Number of books to skip (default: 0)
+    - `offset`: Number of books to skip (default: 0)
     - `limit`: Maximum number of books to return (default: 100, max: 1000)
     - `status`: Filter by book status (available/issued)
     - `author`: Filter by author
     - `sort_by`: Sort by title or year
+  - Response format:
+    ```json
+    {
+      "data": [...],
+      "pagination": {
+        "total": 25,
+        "offset": 0,
+        "limit": 10,
+        "has_next": true,
+        "has_prev": false
+      }
+    }
+    ```
 
 - `GET /books/{book_id}` - Get a specific book by ID
 

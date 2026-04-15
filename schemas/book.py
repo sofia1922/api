@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, ConfigDict
 from uuid import UUID
 from enum import Enum
+from typing import List, Optional
 
 class BookStatus(str, Enum):
     available = "available"
@@ -17,3 +18,15 @@ class BookResponse(BookCreate):
     id: str
 
     model_config = ConfigDict(from_attributes=True)
+
+class PaginationMeta(BaseModel):
+    total: Optional[int] = None
+    offset: int = 0
+    limit: int
+    has_next: bool
+    has_prev: Optional[bool] = None
+    next_cursor: Optional[str] = None
+
+class BooksResponse(BaseModel):
+    data: List[BookResponse]
+    pagination: PaginationMeta
