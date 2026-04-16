@@ -1,15 +1,13 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from api import books
-from database import engine, Base
+from database import connect_to_mongo, close_mongo_connection
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    Base.metadata.create_all(bind=engine)
+    await connect_to_mongo()
     yield
-    # Shutdown
-    # Add cleanup code here if needed
+    await close_mongo_connection()
 
 app = FastAPI(lifespan=lifespan)
 

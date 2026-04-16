@@ -1,14 +1,13 @@
-from sqlalchemy import Column, Integer, String, Enum as SQLEnum
-from database import Base
+from pydantic import BaseModel, Field, ConfigDict
+from uuid import uuid4
 from schemas.book import BookStatus
-import uuid
 
-class Book(Base):
-    __tablename__ = "books"
+class Book(BaseModel):
+    model_config = ConfigDict(validate_assignment=True)
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    title = Column(String, nullable=False)
-    author = Column(String, nullable=False)
-    description = Column(String, nullable=False)
-    status = Column(SQLEnum(BookStatus), nullable=False)
-    year = Column(Integer, nullable=False)
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    title: str = Field(min_length=1)
+    author: str = Field(min_length=1)
+    description: str
+    status: BookStatus
+    year: int = Field(ge=1500, le=2100)

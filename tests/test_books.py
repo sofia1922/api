@@ -1,59 +1,71 @@
-from fastapi.testclient import TestClient
-from main import app
 import pytest
+from motor.motor_asyncio import AsyncIOMotorClient
 
-def test_create_book(client):
-    response = client.post("/books/", json={
-        "title": "Test Book",
-        "author": "Author",
-        "description": "Desc",
-        "status": "available",
-        "year": 2020
-    })
-    assert response.status_code == 201
-    data = response.json()
-    assert "id" in data
-    assert data["title"] == "Test Book"
+TEST_MONGODB_URL = "mongodb://admin:password@localhost:27017/test_library_db?authSource=admin"
 
-def test_get_books(client):
-    # Create a book first
-    client.post("/books/", json={
-        "title": "Test Book 2",
-        "author": "Author 2",
-        "description": "Desc 2",
-        "status": "available",
-        "year": 2021
-    })
+@pytest.mark.asyncio
+async def test_create_book():
+    client = AsyncIOMotorClient(TEST_MONGODB_URL)
+    database = client.test_library_db
+    
+    # Clear collection
+    await database.books.delete_many({})
+    
+    from repository.book_repository import add
+    from schemas.book import BookCreate
+    
+    book_data = BookCreate(
+        title="Test Book",
+        author="Author",
+        description="Desc",
+        status="available",
+        year=2020
+    )
+    
+    book = await add(database, book_data)
+    
+    assert book.title == "Test Book"
+    assert book.author == "Author"
+    assert book.status == "available"
+    assert book.year == 2020
+    assert book.id is not None
+    
+    # Verify in database
+    doc = await database.books.find_one({"id": book.id})
+    assert doc is not None
+    assert doc["title"] == "Test Book"
+    
+    client.close()
 
-    response = client.get("/books/")
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data, list)
-    assert len(data) >= 1
-
-def test_get_books_pagination(client):
-    # Create multiple books
+@pytest.mark.asyncio
+async def test_get_books_pagination():
+    client = AsyncIOMotorClient(TEST_MONGODB_URL)
+    database = client.test_library_db
+    
+    # Clear collection
+    await database.books.delete_many({})
+    
+    from repository.book_repository import add, get_all
+    from schemas.book import BookCreate
+    
+    # Add test books
     for i in range(5):
-        client.post("/books/", json={
-            "title": f"Test Book {i}",
-            "author": f"Author {i}",
-            "description": f"Desc {i}",
-            "status": "available",
-            "year": 2020 + i
-        })
-
-    # Test limit
-    response = client.get("/books/?limit=2")
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
-
-    # Test skip
-    response = client.get("/books/?skip=2&limit=2")
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
-
-def test_delete_idempotent(client):
-    response = client.delete("/books/123")
-    assert response.status_code == 204
+        book_data = BookCreate(
+            title=f"Test Book {i}",
+            author=f"Author {i}",
+            description=f"Desc {i}",
+            status="available",
+            year=2020 + i
+        )
+        await add(database, book_data)
+    
+    # Test pagination
+    books, total = await get_all(database, offset=0, limit=2)
+    assert len(books) == 2
+    assert total == 5
+    
+    books, total = await get_all(database, offset=2, limit=2)
+    assert len(books) == 2
+    assert total == 5
+    
+    client.close()

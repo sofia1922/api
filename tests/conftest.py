@@ -1,39 +1,39 @@
 import os
-os.environ["DATABASE_URL"] = "sqlite:///./test.db"
+os.environ["MONGODB_URL"] = "mongodb://admin:password@localhost:27017/test_library_db?authSource=admin"
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from database import Base, get_db
+from motor.motor_asyncio import AsyncIOMotorClient
+from database import get_database
 from main import app
-from fastapi.testclient import TestClient
+from httpx import AsyncClient
 
-# Test database URL
-TEST_DATABASE_URL = "sqlite:///./test.db"
-
-engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+TEST_MONGODB_URL = "mongodb://admin:password@localhost:27017/test_library_db?authSource=admin"
 
 @pytest.fixture(scope="function")
-def db():
-    Base.metadata.create_all(bind=engine)
-    db = TestingSessionLocal()
+async def db():
+    client = AsyncIOMotorClient(TEST_MONGODB_URL)
+    database = client.test_library_db
+
+    # Clear the collection before each test
+    await database.books.delete_many({})
+
     try:
-        yield db
+        yield database
     finally:
-        db.rollback()
-        db.close()
-        Base.metadata.drop_all(bind=engine)
+        await database.books.delete_many({})
+        client.close()
 
-@pytest.fixture(scope="module")
-def client():
-    def override_get_db():
-        db = TestingSessionLocal()
+@pytest.fixture
+async def client():
+    async def override_get_database():
+        client = AsyncIOMotorClient(TEST_MONGODB_URL)
+        database = client.test_library_db
         try:
-            yield db
+            yield database
         finally:
-            db.close()
+            client.close()
 
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
-        yield c
+    app.dependency_overrides[get_database] = override_get_database
+    client = AsyncClient(app=app, base_url="http://testserver")
+    yield client
+    await client.aclose()
