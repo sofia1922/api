@@ -1,29 +1,27 @@
 import os
-os.environ["MONGODB_URL"] = "mongodb://admin:password@localhost:27017/test_library_db?authSource=admin"
-
 import pytest
+import pytest_asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
-from database import get_database
+from httpx import AsyncClient, ASGITransport
+
 from main import app
-from httpx import AsyncClient
+from database import get_database
 
 TEST_MONGODB_URL = "mongodb://admin:password@localhost:27017/test_library_db?authSource=admin"
 
-@pytest.fixture(scope="function")
+@pytest_asyncio.fixture(scope="function")
 async def db():
     client = AsyncIOMotorClient(TEST_MONGODB_URL)
     database = client.test_library_db
-
-    # Clear the collection before each test
+    
     await database.books.delete_many({})
+    
+    yield database  
+    
+    await database.books.delete_many({})
+    client.close()
 
-    try:
-        yield database
-    finally:
-        await database.books.delete_many({})
-        client.close()
-
-@pytest.fixture
+@pytest_asyncio.fixture(scope="function")
 async def client():
     async def override_get_database():
         client = AsyncIOMotorClient(TEST_MONGODB_URL)
@@ -34,6 +32,8 @@ async def client():
             client.close()
 
     app.dependency_overrides[get_database] = override_get_database
-    client = AsyncClient(app=app, base_url="http://testserver")
-    yield client
-    await client.aclose()
+    
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+    
+    app.dependency_overrides.clear()

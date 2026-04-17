@@ -8,31 +8,26 @@ async def get_all(db: AsyncIOMotorDatabase, offset: int = 0, limit: int = 100,
                   sort_by: Optional[str] = None) -> Tuple[List[Book], int]:
     collection = db.books
 
-    # Build filter
     filter_query = {}
     if status:
         filter_query["status"] = status
     if author:
         filter_query["author"] = {"$regex": author, "$options": "i"}  # Case-insensitive search
 
-    # Get total count
     total = await collection.count_documents(filter_query)
 
-    # Build sort
     sort_query = []
     if sort_by == "title":
         sort_query = [("title", 1)]
     elif sort_by == "year":
         sort_query = [("year", 1)]
 
-    # Get documents with pagination
     if sort_query:
         cursor = collection.find(filter_query).sort(sort_query).skip(offset).limit(limit)
     else:
         cursor = collection.find(filter_query).skip(offset).limit(limit)
     documents = await cursor.to_list(length=None)
 
-    # Convert to Book models
     books = [Book(**doc) for doc in documents]
 
     return books, total
