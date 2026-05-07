@@ -12,7 +12,7 @@ async def get_all(db: AsyncIOMotorDatabase, offset: int = 0, limit: int = 100,
     if status:
         filter_query["status"] = status
     if author:
-        filter_query["author"] = {"$regex": author, "$options": "i"}  # Case-insensitive search
+        filter_query["author"] = {"$regex": author, "$options": "i"}  
 
     total = await collection.count_documents(filter_query)
 

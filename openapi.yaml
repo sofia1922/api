@@ -1,0 +1,135 @@
+openapi: 3.0.0
+
+info:
+  title: Library API
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:4010
+
+paths:
+
+  /books:
+    get:
+      summary: Get all books
+
+      responses:
+        '200':
+          description: List of books
+
+          content:
+            application/json:
+              example:
+                data:
+                  - id: "1"
+                    title: "Clean Code"
+                    author: "Robert Martin"
+                    year: 2008
+                    status: "available"
+
+                  - id: "2"
+                    title: "FastAPI"
+                    author: "Sebastian Ramirez"
+                    year: 2023
+                    status: "borrowed"
+
+                pagination:
+                  total: 2
+                  offset: 0
+                  limit: 100
+                  has_next: false
+                  has_prev: false
+
+    post:
+      summary: Create book
+
+      requestBody:
+        required: true
+
+        content:
+          application/json:
+            example:
+              title: "New Book"
+              author: "Author"
+              year: 2024
+              status: "available"
+
+      responses:
+        '201':
+          description: Book created
+
+          content:
+            application/json:
+              example:
+                id: "3"
+                title: "New Book"
+                author: "Author"
+                year: 2024
+                status: "available"
+
+  /books/{book_id}:
+    get:
+      summary: Get one book
+
+      parameters:
+        - in: path
+          name: book_id
+          required: true
+
+          schema:
+            type: string
+
+      responses:
+        '200':
+          description: One book
+
+          content:
+            application/json:
+              example:
+                id: "1"
+                title: "Clean Code"
+                author: "Robert Martin"
+                year: 2008
+                status: "available"
+
+        '404':
+          description: Book not found
+
+    delete:
+      summary: Delete book
+
+      parameters:
+        - in: path
+          name: book_id
+          required: true
+
+          schema:
+            type: string
+
+      responses:
+        '204':
+          description: Book deleted
+
+  /auth/login:
+    post:
+      summary: Login
+
+      requestBody:
+        required: true
+
+        content:
+          application/json:
+            example:
+              username: "sonya"
+              password: "123456"
+
+      responses:
+        '200':
+          description: JWT tokens
+
+          content:
+            application/json:
+              example:
+                access_token: "jwt-access-token"
+                refresh_token: "jwt-refresh-token"
+                token_type: "bearer"

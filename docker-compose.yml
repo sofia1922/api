@@ -1,26 +1,47 @@
-version: '3.8'
-
 services:
+
   mongodb:
     image: mongo:7.0
+
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: password
       MONGO_INITDB_DATABASE: library_db
+
     ports:
-      - "27017:27017"
+      - "27018:27017"
+
     volumes:
       - mongodb_data:/data/db
 
+
   app:
     build: .
+
     ports:
-      - "8000:8000"
+      - "8001:8000"
+
     environment:
       MONGODB_URL: mongodb://admin:password@mongodb:27017/library_db?authSource=admin
+
     depends_on:
       - mongodb
-    command: sh -c "sleep 10 && uvicorn main:app --host 0.0.0.0 --port 8000"
+
+    command: sh -c "sleep 20 && uvicorn main:app --host 0.0.0.0 --port 8000"
+
+
+  prism:
+    image: stoplight/prism:4
+
+    ports:
+      - "4010:4010"
+
+    volumes:
+      - ./openapi.yaml:/tmp/openapi.yaml
+
+    command: >
+      mock -h 0.0.0.0 /tmp/openapi.yaml
+
 
 volumes:
   mongodb_data:
