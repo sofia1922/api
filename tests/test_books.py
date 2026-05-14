@@ -26,15 +26,15 @@ async def test_repository_lifecycle():
 
 @pytest.mark.asyncio
 async def test_repository_pagination(db):
-    db = db
     await db.books.delete_many({})
     
     for i in range(5):
         await add(db, BookCreate(title=f"B{i}", author="A", description="D", status="available", year=2020))
 
     books, total = await get_all(db, offset=0, limit=2)
-    assert len(books) == 2
-    assert total == 5
+    
+    assert len(books) == 2 
+    assert total == 5      
 
 @pytest.mark.asyncio
 async def test_create_book_http(client):
