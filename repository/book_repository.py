@@ -1,52 +1,64 @@
-from motor.motor_asyncio import AsyncIOMotorDatabase
 from typing import List, Optional, Tuple
 from models.book_model import Book
 from schemas.book import BookCreate
 
-async def get_all(db: AsyncIOMotorDatabase, offset: int = 0, limit: int = 100,
-                  status: Optional[str] = None, author: Optional[str] = None,
-                  sort_by: Optional[str] = None) -> Tuple[List[Book], int]:
-    collection = db.books
+_BOOKS: List[Book] = []
 
-    filter_query = {}
+
+def _filter_books(
+    books: List[Book],
+    status: Optional[str],
+    author: Optional[str],
+) -> List[Book]:
+    result = books
     if status:
-        filter_query["status"] = status
+        result = [book for book in result if book.status == status]
     if author:
-        filter_query["author"] = {"$regex": author, "$options": "i"}  # Case-insensitive search
+        result = [book for book in result if author.lower() in book.author.lower()]
+    return result
 
-    total = await collection.count_documents(filter_query)
 
-    sort_query = []
+def get_all(
+    db: Optional[object],
+    offset: int = 0,
+    limit: int = 100,
+    status: Optional[str] = None,
+    author: Optional[str] = None,
+    sort_by: Optional[str] = None,
+) -> Tuple[List[Book], int]:
+    books = _filter_books(_BOOKS, status, author)
+
     if sort_by == "title":
-        sort_query = [("title", 1)]
+        books = sorted(books, key=lambda book: book.title)
     elif sort_by == "year":
-        sort_query = [("year", 1)]
+        books = sorted(books, key=lambda book: book.year)
 
-    if sort_query:
-        cursor = collection.find(filter_query).sort(sort_query).skip(offset).limit(limit)
-    else:
-        cursor = collection.find(filter_query).skip(offset).limit(limit)
-    documents = await cursor.to_list(length=None)
+    total = len(books)
+    paginated = books[offset : offset + limit]
+    return paginated, total
 
-    books = [Book(**doc) for doc in documents]
 
-    return books, total
+def clear(db: Optional[object] = None) -> None:
+    _BOOKS.clear()
 
-async def get_by_id(db: AsyncIOMotorDatabase, book_id: str) -> Optional[Book]:
-    collection = db.books
-    document = await collection.find_one({"id": book_id})
-    if document:
-        return Book(**document)
+
+def get_by_id(db: Optional[object], book_id: str) -> Optional[Book]:
+    for book in _BOOKS:
+        if book.id == book_id:
+            return book
     return None
 
-async def add(db: AsyncIOMotorDatabase, book_data: BookCreate) -> Book:
-    collection = db.books
-    book_dict = book_data.model_dump()
-    book = Book(**book_dict)
-    await collection.insert_one(book.model_dump())
+
+def add(db: Optional[object], book_data: BookCreate) -> Book:
+    book = Book(**book_data.model_dump())
+    _BOOKS.append(book)
     return book
 
-async def delete(db: AsyncIOMotorDatabase, book_id: str) -> bool:
-    collection = db.books
-    result = await collection.delete_one({"id": book_id})
-    return result.deleted_count > 0
+
+def delete(db: Optional[object], book_id: str) -> bool:
+    global _BOOKS
+    for index, book in enumerate(_BOOKS):
+        if book.id == book_id:
+            del _BOOKS[index]
+            return True
+    return False

@@ -1,49 +1,239 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Query
-from typing import List, Optional
-from motor.motor_asyncio import AsyncIOMotorDatabase
-from schemas.book import BookCreate, BookResponse, BooksResponse, PaginationMeta
+from flask import request
+from flask_restful import Resource
+
+from schemas.book import BookCreate
 from services import book_service
-from database import get_database
 
-router = APIRouter(prefix="/books", tags=["Books"])
 
-@router.get("/", response_model=BooksResponse)
-async def get_books(db: AsyncIOMotorDatabase = Depends(get_database),
-                    offset: int = Query(0, ge=0),
-                    limit: int = Query(100, ge=1, le=1000),
-                    status: Optional[str] = None,
-                    author: Optional[str] = None,
-                    sort_by: Optional[str] = Query(None, pattern="^(title|year)$")):
-    books, total = await book_service.get_books(db, offset, limit, status, author, sort_by)
+def _build_pagination(total: int, offset: int, limit: int):
+    return {
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "has_next": (offset + limit) < total,
+        "has_prev": offset > 0,
+    }
 
-    has_next = (offset + limit) < total
-    has_prev = offset > 0
 
-    pagination = PaginationMeta(
-        total=total,
-        offset=offset,
-        limit=limit,
-        has_next=has_next,
-        has_prev=has_prev
-    )
+class BooksListResource(Resource):
 
-    return BooksResponse(data=books, pagination=pagination)
+    def get(self):
+        """
+        Get a list of books with filtering and sorting.
+        ---
+        tags:
+          - Books
+        summary: List all books
+        parameters:
+          - name: offset
+            in: query
+            type: integer
+            default: 0
+          - name: limit
+            in: query
+            type: integer
+            default: 100
+          - name: status
+            in: query
+            type: string
+          - name: author
+            in: query
+            type: string
+          - name: sort_by
+            in: query
+            type: string
+        responses:
+          200:
+            description: List of books retrieved successfully
+            schema:
+              type: object
+              properties:
+                data:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      title:
+                        type: string
+                      author:
+                        type: string
+                      description:
+                        type: string
+                      status:
+                        type: string
+                      year:
+                        type: integer
+                pagination:
+                  type: object
+                  properties:
+                    total:
+                      type: integer
+                    offset:
+                      type: integer
+                    limit:
+                      type: integer
+                    has_next:
+                      type: boolean
+                    has_prev:
+                      type: boolean
+        """
+        offset = int(request.args.get("offset", 0))
+        limit = int(request.args.get("limit", 100))
+        status = request.args.get("status")
+        author = request.args.get("author")
+        sort_by = request.args.get("sort_by")
 
-@router.get("/{book_id}", response_model=BookResponse)
-async def get_book(book_id: str, db: AsyncIOMotorDatabase = Depends(get_database)):
-    book = await book_service.get_book(db, book_id)
-    if not book:
-        raise HTTPException(status_code=404, detail="Book not found")
-    return book
+        if limit < 1 or limit > 1000:
+            return {"message": "limit must be between 1 and 1000"}, 400
+        if offset < 0:
+            return {"message": "offset must be 0 or greater"}, 400
 
-@router.post("/", response_model=BookResponse,
-             status_code=status.HTTP_201_CREATED)
-async def create_book(book: BookCreate, db: AsyncIOMotorDatabase = Depends(get_database)):
-    return await book_service.create_book(db, book)
+        books, total = book_service.get_books(None, offset, limit, status, author, sort_by)
 
-@router.delete("/{book_id}",
-               status_code=status.HTTP_204_NO_CONTENT)
-async def delete_book(book_id: str, db: AsyncIOMotorDatabase = Depends(get_database)):
-    deleted = await book_service.delete_book(db, book_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Book not found")
+        return {
+            "data": [book.model_dump() for book in books],
+            "pagination": _build_pagination(total, offset, limit),
+        }
+
+    def post(self):
+        """
+        Create a new book.
+        ---
+        tags:
+          - Books
+        summary: Create a new book
+        consumes:
+          - application/json
+        parameters:
+          - name: body
+            in: body
+            required: true
+            schema:
+              type: object
+              required: [title, author, description, status, year]
+              properties:
+                title:
+                  type: string
+                author:
+                  type: string
+                description:
+                  type: string
+                status:
+                  type: string
+                year:
+                  type: integer
+        responses:
+          201:
+            description: Book created successfully
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                title:
+                  type: string
+                author:
+                  type: string
+                description:
+                  type: string
+                status:
+                  type: string
+                  enum: ["available", "issued"]
+                year:
+                  type: integer
+          400:
+            description: Invalid request body
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+        """
+        payload = request.get_json(force=True, silent=True)
+        if payload is None:
+            return {"message": "Request body must be valid JSON"}, 400
+
+        try:
+            book_data = BookCreate.model_validate(payload)
+        except Exception as exc:
+            return {"message": str(exc)}, 400
+
+        book = book_service.create_book(None, book_data)
+        return book.model_dump(), 201
+
+
+class BookResource(Resource):
+
+    def get(self, book_id: str):
+        """
+        Get a book by ID.
+        ---
+        tags:
+          - Books
+        summary: Get a book by ID
+        parameters:
+          - name: book_id
+            in: path
+            type: string
+            required: true
+        responses:
+          200:
+            description: Book retrieved successfully
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                title:
+                  type: string
+                author:
+                  type: string
+                description:
+                  type: string
+                status:
+                  type: string
+                  enum: ["available", "issued"]
+                year:
+                  type: integer
+          404:
+            description: Book not found
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+        """
+        book = book_service.get_book(None, book_id)
+        if not book:
+            return {"message": "Book not found"}, 404
+        return book.model_dump()
+
+    def delete(self, book_id: str):
+        """
+        Delete a book by ID.
+        ---
+        tags:
+          - Books
+        summary: Delete a book
+        parameters:
+          - name: book_id
+            in: path
+            type: string
+            required: true
+        responses:
+          204:
+            description: Book deleted successfully
+          404:
+            description: Book not found
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+        """
+        deleted = book_service.delete_book(None, book_id)
+        if not deleted:
+            return {"message": "Book not found"}, 404
+        return None, 204
